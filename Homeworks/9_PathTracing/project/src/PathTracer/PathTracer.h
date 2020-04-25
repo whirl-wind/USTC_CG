@@ -39,6 +39,7 @@ namespace Ubpa {
 
 		BVH bvh;
 
+		const float Russian_Roulette_ = 0.8;
 		const Cmpt::Camera* const cam;
 		const Cmpt::Camera::CoordinateSystem ccs;
 	};

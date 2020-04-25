@@ -116,7 +116,11 @@ $$
 \bar{p}_i=p_i-\lambda \bar{\delta}_i=p_i-\lambda\langle\delta_i,\pmb{n}_i\rangle \pmb{n}_i
 $$
 
-- 我们将 $\langle\delta_i,\pmb{n}_i\rangle$ 存到置换贴图中，注意设置好 bias 和 scale 将值变换到 0 和 1 之间
+- 我们将
+$$
+\langle\delta_i,\pmb{n}_i\rangle
+$$
+存到置换贴图中，注意设置好 bias 和 scale 将值变换到 0 和 1 之间
 
   > 简单来说，每个顶点有纹理坐标，将图像中该位置设为 bias 和 scale 后的 $\langle\delta_i,\pmb{n}_i\rangle$ 
   >

@@ -22,10 +22,11 @@ gl::Texture2D loadTexture(char const* path);
 // settings
 unsigned int scr_width = 800;
 unsigned int scr_height = 600;
-bool have_shadow = false;
+bool have_shadow = true;
 
 // camera
 Camera camera(pointf3(0.0f, 0.0f, 3.0f));
+//Camera camera(pointf3(0.0f, 5.0f, 0.0f));
 float lastX = scr_width / 2.0f;
 float lastY = scr_height / 2.0f;
 bool firstMouse = true;
@@ -99,6 +100,49 @@ int main()
     // load model
     // ------------------------------------------------------------------
     auto spot = SimpleLoader::LoadObj("../data/models/spot_triangulated_good.obj");
+    // plane
+    std::vector<pointf3> positions;
+    std::vector<pointf2> texcoords;
+    std::vector<normalf> normals;
+    std::vector<vecf3> tangents;
+    std::vector<GLuint> indices;
+    constexpr size_t N = 200;
+    const pointf3 LBCorner{ -5,0,5 };
+    const vecf3 right{ 10,0,0 };
+    const vecf3 up{ 0,0,-10 };
+    for (size_t j = 0; j <= N; j++) {
+        float v = j / static_cast<float>(N);
+        for (size_t i = 0; i <= N; i++) {
+            float u = i / static_cast<float>(N);
+            positions.push_back(LBCorner + u * right + v * up);
+            texcoords.emplace_back(0.0, 0.0);
+            normals.emplace_back(0, 1, 0);
+            tangents.emplace_back(1, 0, 0);
+        }
+    }
+    for (size_t j = 0; j < N; j++) {
+        for (size_t i = 0; i < N; i++) {
+            size_t two_tri[6] = {
+                j * (N + 1) + i, j * (N + 1) + i + 1, (j + 1) * (N + 1) + i,
+                (j + 1) * (N + 1) + i + 1,(j + 1) * (N + 1) + i,j * (N + 1) + i + 1
+            };
+            for (auto idx : two_tri)
+                indices.push_back(static_cast<GLuint>(idx));
+        }
+    }
+    gl::VertexBuffer vb_pos(positions.size() * sizeof(pointf3), positions[0].data());
+    gl::VertexBuffer vb_uv(texcoords.size() * sizeof(pointf2), texcoords[0].data());
+    gl::VertexBuffer vb_n(normals.size() * sizeof(normalf), normals[0].data());
+    gl::VertexBuffer vb_t(tangents.size() * sizeof(vecf3), tangents[0].data());
+    gl::ElementBuffer eb(gl::BasicPrimitiveType::Triangles, indices.size() / 3, indices.data());
+
+    gl::VertexArray::Format format;
+    format.attrptrs.push_back(vb_pos.AttrPtr(3, gl::DataType::Float, false, sizeof(pointf3)));
+    format.attrptrs.push_back(vb_uv.AttrPtr(2, gl::DataType::Float, false, sizeof(pointf2)));
+    format.attrptrs.push_back(vb_n.AttrPtr(3, gl::DataType::Float, false, sizeof(normalf)));
+    format.attrptrs.push_back(vb_t.AttrPtr(3, gl::DataType::Float, false, sizeof(vecf3)));
+    format.eb = &eb;
+    gl::VertexArray plane({ 0,1,2,3 }, format);
     // world space positions of our cubes
     pointf3 instancePositions[] = {
         pointf3(0.0f,  0.0f,  0.0f),
@@ -155,14 +199,31 @@ int main()
         // TODO: HW8 - 2_Shadow | generate shadow map
         // 1. set shadow_program's uniforms: model, view, projection, ...
         //   - projection: transformf::perspective(...)
+        transformf lightprojection = transformf::perspective(to_radian(120.0f), 1.0f, 0.1f, 100.f);
+        shadow_program.SetMatf4("projection", lightprojection);
+        transformf lightview = transformf::look_at(pointf3(0.01f, 5.0f, 0.01f), pointf3(0.0f, 0.0f, 0.0f), vecf3(0.0f, 1.0f, 0.0f));
+        shadow_program.SetMatf4("view", lightview);
+        transformf lightSpaceMatrix = lightprojection * lightview;
+        glCullFace(GL_FRONT);
         // 2. draw scene : spot->va->Draw(&shadow_program)
         //   - 10 spots
         //   - (optional) plane : receive shadow
         // -------
         // ref: https://learnopengl-cn.github.io/05%20Advanced%20Lighting/03%20Shadows/01%20Shadow%20Mapping/
+        
+        for (unsigned int i = 0; i < 10; i++)
+        {
+            // calculate the model matrix for each object and pass it to shader before drawing
+            float angle = 20.0f * i + 10.f * (float)glfwGetTime();
+            transformf model(instancePositions[i], quatf{ vecf3(1.0f, 0.3f, 0.5f), to_radian(angle) });
+            shadow_program.SetMatf4("model", model);
+            spot->va->Draw(&shadow_program);
+        }
+        transformf pmodel(pointf3(0.0f, -1.2f, -3.0f), quatf{ vecf3(1.0f, 0.3f, 0.5f), to_radian(0.0f) });
+        shadow_program.SetMatf4("model", pmodel);
+        plane.Draw(&shadow_program);
 
-        // ... (your codes)
-
+        glCullFace(GL_BACK); // 不要忘记设回原先的culling face
         //=================================
 
         gl::FrameBuffer::BindReset(); // default framebuffer
@@ -185,6 +246,9 @@ int main()
 
         // TODO: HW8 - 2_Shadow | set uniforms about shadow
         light_shadow_program.SetBool("have_shadow", have_shadow);
+        light_shadow_program.SetMatf4("lightspacematrix", lightSpaceMatrix);
+        light_shadow_program.SetFloat("near_plane", 0.1f);
+        light_shadow_program.SetFloat("far_plane", 100.f);
         // near plane, far plane, projection, ...
 
         for (unsigned int i = 0; i < 10; i++)
@@ -195,6 +259,9 @@ int main()
             light_shadow_program.SetMatf4("model", model);
             spot->va->Draw(&light_shadow_program);
         }
+        //transformf pmodel(pointf3(0.0f, 0.0f, 0.0f), quatf{ vecf3(1.0f, 0.3f, 0.5f), to_radian(20.0f) });
+        light_shadow_program.SetMatf4("model", pmodel);
+        plane.Draw(&light_shadow_program);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------

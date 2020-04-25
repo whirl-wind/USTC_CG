@@ -5,6 +5,8 @@
 #include <Engine/MeshEdit/Glue.h>
 #include <Engine/MeshEdit/MinSurf.h>
 #include <Engine/MeshEdit/Paramaterize.h>
+#include <Engine/MeshEdit/ASAP.h>
+#include <Engine/MeshEdit/ARAP.h>
 #include <Engine/MeshEdit/IsotropicRemeshing.h>
 #include <Engine/MeshEdit/ShortestPath.h>
 #include <Engine/MeshEdit/MST.h>
@@ -194,6 +196,12 @@ void Attribute::ComponentVisitor::ImplVisit(Ptr<CmptSimulate> simulate) {
 	grid->AddButton("set x min fix", [simulate]() {
 		simulate->SetLeftFix();
 		});
+	grid->AddButton("Blow", [simulate]() {
+		simulate->CheckBlow();
+	});
+	grid->AddButton("Bounce", [simulate]() {
+		simulate->CheckBounce();
+	});
 }
 
 // -------------- Camera --------------
@@ -367,6 +375,43 @@ void Attribute::ComponentVisitor::ImplVisit(Ptr<TriMesh> mesh) {
 	grid->AddButton("Paramaterize", [mesh, pOGLW = attr->pOGLW]() {
 		auto paramaterize = Paramaterize::New(mesh);
 		if (paramaterize->Run())
+			printf("Paramaterize done\n");
+		pOGLW->DirtyVAO(mesh);
+	});
+
+	grid->AddButton("ASAP", [mesh, pOGLW = attr->pOGLW]() {
+		auto asap = ASAP::New(mesh);
+		if (asap->Run())
+			printf("Paramaterize done\n");
+		pOGLW->DirtyVAO(mesh);
+	});
+
+	grid->AddButton("ASAPShow", [mesh, pOGLW = attr->pOGLW]() {
+		auto asap = ASAP::New(mesh);
+		if (asap->Show())
+			printf("Paramaterize done\n");
+		pOGLW->DirtyVAO(mesh);
+	});
+
+	//------Add Value------
+	int* time = new int(10);
+	grid->AddEditVal({ "ARAPtimes" }, 10, 10, 100, [=](const int& val) {
+		*time = val;
+	});
+	//------End------
+
+	grid->AddButton("ARAP", [mesh, pOGLW = attr->pOGLW, time]() {
+		auto arap = ARAP::New(mesh);
+		arap->setTimes(*time);
+		if (arap->Run())
+			printf("Paramaterize done\n");
+		pOGLW->DirtyVAO(mesh);
+	});
+
+	grid->AddButton("ARAPShow", [mesh, pOGLW = attr->pOGLW, time]() {
+		auto arap = ARAP::New(mesh);
+		arap->setTimes(*time);
+		if (arap->Show())
 			printf("Paramaterize done\n");
 		pOGLW->DirtyVAO(mesh);
 	});

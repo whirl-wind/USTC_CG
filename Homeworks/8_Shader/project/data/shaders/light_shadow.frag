@@ -11,6 +11,9 @@ uniform sampler2D shadowmap;
 uniform bool have_shadow;
 // TODO: HW8 - 2_Shadow | uniforms
 // add uniforms for mapping position in world space to position in shadowmap space
+uniform mat4 lightspacematrix;
+uniform float near_plane;
+uniform float far_plane;
 
 uniform vec3 ambient_irradiance;
 uniform sampler2D albedo_texture;
@@ -54,6 +57,33 @@ float GGX_D(float alpha, vec3 N, vec3 H) {
 	return step(cos_stheta, 0) * alpha2 / denominator;
 }
 
+float LinearizeDepth(float depth)
+{
+    float z = depth * 2.0 - 1.0; // Back to NDC 
+    return (2.0 * near_plane * far_plane) / (far_plane + near_plane - z * (far_plane - near_plane));
+}
+
+float ShadowCalculation(vec4 fragPosLightSpace, float bias)
+{
+    // Ö´ÐÐÍ¸ÊÓ³ý·¨
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+	projCoords = projCoords * 0.5 + 0.5;
+	float closestDepth = LinearizeDepth(texture(shadowmap, projCoords.xy).r) / far_plane;
+	float currentDepth = projCoords.z;
+	float shadow = 0.0;
+	vec2 texelSize = 1.0 / textureSize(shadowmap, 0);
+	for(int x = -1; x <= 1; ++x)
+	{
+		for(int y = -1; y <= 1; ++y)
+		{
+			float pcfDepth = texture(shadowmap, projCoords.xy + vec2(x, y) * texelSize).r; 
+			shadow += currentDepth - bias > pcfDepth ? 1.0 : 0.0;        
+		}    
+	}
+	shadow /= 9.0;
+	return shadow;
+}
+
 void main() {
 	vec3 albedo = texture(albedo_texture, vs_out.TexCoord).rgb;
 	float alpha = roughness * roughness;
@@ -78,7 +108,11 @@ void main() {
 	
 	vec3 brdf = diffuse + specular;
 	// TODO: HW8 - 2_Shadow | shadow
-	float visible = 1.0; // if the fragment is in shadow, set it to 0
+	vec4 FragPosLightSpace = lightspacematrix * vec4(vs_out.WorldPos, 1.0);
+	vec4 lightspaceN = lightspacematrix * vec4(vs_out.Normal, 1.0);
+	float bias = max(0.005 * (1.0 - dot(lightspaceN.xyz, vec3(0,0,1))), 0.0005);
+	float visible = 1.0 - ShadowCalculation(FragPosLightSpace, bias); // if the fragment is in shadow, set it to 0
+
 	vec3 Lo_direct = visible * brdf * point_light_radiance * max(cos_theta, 0) / dist2;
 	vec3 Lo_ambient = (1-metalness) * albedo / PI * ambient_irradiance;
 	vec3 Lo = Lo_direct + Lo_ambient;

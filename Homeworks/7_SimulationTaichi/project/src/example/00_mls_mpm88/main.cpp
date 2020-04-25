@@ -1,5 +1,5 @@
 //88-Line 2D Moving Least Squares Material Point Method (MLS-MPM)[with comments]
-//#define TC_IMAGE_IO   // Uncomment this line for image exporting functionality
+#define TC_IMAGE_IO   // Uncomment this line for image exporting functionality
 #include "taichi.h"    // Note: You DO NOT have to install taichi or taichi_mpm.
 using namespace taichi;// You only need [taichi.h] - see below for instructions.
 const int n = 80 /*grid resolution (cells)*/, window_size = 800;
@@ -82,7 +82,7 @@ int main() {
       canvas.rect(Vec(0.04), Vec(0.96)).radius(2).color(0x4FB99F).close();// Box
       for(auto p:particles)canvas.circle(p.x).radius(2).color(p.c);//Particles
       gui.update();                                              // Update image
-      // canvas.img.write_as_image(fmt::format("tmp/{:05d}.png", f++));
+      canvas.img.write_as_image(fmt::format("tmp/{:05d}.png", f++));
     }
   }
 } //----------------------------------------------------------------------------

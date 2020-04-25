@@ -23,7 +23,8 @@ uniform bool have_denoise;
 void main()
 {
     // TODO: HW8 - 1_denoise | denoise
-    vec4 worldPos = model * vec4(aPos, 1.0);
+    vec3 displacement = texture(displacementmap, aTexCoord).r * displacement_lambda * aNormal * displacement_scale + displacement_bias * displacement_lambda * aNormal;
+    vec4 worldPos = model * vec4(aPos - displacement, 1.0);
 	
 	vs_out.WorldPos = worldPos.xyz / worldPos.w;
     vs_out.TexCoord = aTexCoord;

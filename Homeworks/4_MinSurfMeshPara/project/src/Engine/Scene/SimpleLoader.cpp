@@ -66,17 +66,18 @@ Ptr<SObj> SimpleLoader::LoadObj(const string& path) {
 	for (const auto& pos : positions)
 		box.combine_with(pos);
 	auto center = box.center();
+	
 	float scale = sqrt(3.f / box.diagonal().norm2());
 	for (auto& pos : positions)
 		pos = (scale * (pos - center)).cast_to<pointf3>();
-
+	
 	auto tmp = StrAPI::Replace(path, "\\", "/");
 	auto sobj = SObj::New(nullptr, StrAPI::Split(tmp, '/').back());
 	CmptTransform::New(sobj);
 	auto triMesh = TriMesh::New(indices, positions);
 	CmptGeometry::New(sobj, triMesh);
 	CmptMaterial::New(sobj, BSDF_Frostbite::New());
-
+	
 	// add CmptSimulate
 	auto spring = MassSpring::New(triMesh);
 	spring->InitSimu();
