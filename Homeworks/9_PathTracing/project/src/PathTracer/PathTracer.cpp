@@ -5,6 +5,7 @@
 #include <iostream>
 
 #define USE_OPENMP_
+//#define NDEBUG
 #include <thread>
 
 
@@ -48,7 +49,7 @@ inline void UpdateProgress(string str, float progress)
 void PathTracer::Run() {
 	img->SetAll(0.f);
 
-	const int spp = 2; // samples per pixel
+	const int spp = 4; // samples per pixel
 	auto start = std::chrono::system_clock::now();
 #ifdef USE_OPENMP_
 	omp_set_num_threads(std::min(spp,32));
@@ -91,8 +92,9 @@ void PathTracer::Run() {
 				}
 			}
 			float progress = (j + 1) / float(img->height);
-			cout << progress << endl;
+			UpdateProgress("Rendering", progress);
 		}
+		UpdateProgress("Rendering", 1.f);
 	};
 	vector<thread> workers;
 	for (size_t i = 0; i < core_num; i++)
@@ -189,23 +191,23 @@ rgbf PathTracer::Shade(const Intersectors& intersectors, const IntersectorCloses
 			// TODO: L_dir of environment light
 			// - only use SampleLightResult::L, n, pd
 			// - SampleLightResult::x is useless		
-			rayf3 r = rayf3(intersection.pos, sample_light_rst.n.cast_to<vecf3>());
-			Intersectors inter_0;
-			IntersectorClosest::Rst inter_0_rst = inter_0.clostest.Visit(&bvh, r);
-			if (inter_0.visibility.Visit(&bvh, r))
-				L_dir += env_light->Radiance(inter_0_rst.uv) * BRDF(intersection, wo, r.dir) * r.dir.dot(intersection.n.cast_to<vecf3>()) / sample_light_rst.pd;
+			rayf3 r = rayf3(intersection.pos, -sample_light_rst.n.cast_to<vecf3>());
+			if (intersectors.visibility.Visit(&bvh, r))
+				L_dir += sample_light_rst.L * BRDF(intersection, wo, r.dir) * r.dir.dot(intersection.n.cast_to<vecf3>()) / sample_light_rst.pd;
 		}
 		else {
 			// TODO: L_dir of area light
-			rayf3 r = rayf3(intersection.pos, -(intersection.pos - sample_light_rst.x).normalize());
-			Intersectors inter_0;
-			IntersectorClosest::Rst inter_0_rst = inter_0.clostest.Visit(&bvh, r);
-			if (inter_0.visibility.Visit(&bvh, rayf3(intersection.pos, -(intersection.pos - sample_light_rst.x).normalize(), EPSILON<float>, (intersection.pos - inter_0_rst.pos).norm() - EPSILON<float>))) {
-				L_dir += sample_light_rst.L * BRDF(intersection, wo, r.dir) * r.dir.dot(intersection.n.cast_to<vecf3>()) * r.dir.dot(-sample_light_rst.n.cast_to<vecf3>()) / (intersection.pos - inter_0_rst.pos).norm2() / sample_light_rst.pd; 
+			rayf3 r = rayf3(intersection.pos, (sample_light_rst.x - intersection.pos).normalize(), EPSILON<float>, (intersection.pos - sample_light_rst.x).norm() - EPSILON<float>);
+			if (intersectors.visibility.Visit(&bvh, r)) {
+				float cos_l = r.dir.dot(-sample_light_rst.n.cast_to<vecf3>());
+				if (cos_l < 0.0) {
+					cos_l = 0.0;
+				}
+				L_dir += sample_light_rst.L* BRDF(intersection, wo, r.dir)* r.dir.dot(intersection.n.cast_to<vecf3>())* cos_l / (intersection.pos - sample_light_rst.x).norm2() / sample_light_rst.pd;
 			}
 		}
 	});
-
+	
 	// TODO: Russian Roulette
 	// - rand01<float>() : random in [0, 1)
 	if (rand01<float>() < Russian_Roulette_) {
@@ -223,16 +225,24 @@ rgbf PathTracer::Shade(const Intersectors& intersectors, const IntersectorCloses
 		if (inter_rst.IsIntersected() && intersection.sobj->Get<Cmpt::Material>()) {
 			auto light = intersection.sobj->Get<Cmpt::Light>();
 			if (!light) {
-				L_indir += Shade(inter, inter_rst, -wi, true) * BRDF(intersection, wo, wi) * wi.dot(intersection.n.cast_to<vecf3>()) / pdf / Russian_Roulette_;
+				auto mat = intersection.sobj->Get<Cmpt::Material>();
+				auto brdf = dynamic_cast<const stdBRDF*>(mat->material.get());
+				float roughness = brdf->Roughness(intersection.uv);
+				L_indir += Shade(inter, inter_rst, -wi, roughness < EPSILON<float>) * BRDF(intersection, wo, wi) * wi.dot(intersection.n.cast_to<vecf3>()) / pdf / Russian_Roulette_;
 			}
 			else {
 				auto area_light = dynamic_cast<const AreaLight*>(light->light.get());
-				if (!area_light) L_indir += Shade(inter, inter_rst, -wi, last_bounce_specular) * BRDF(intersection, wo, wi) * wi.dot(intersection.n.cast_to<vecf3>()) / pdf / Russian_Roulette_;
+				if (!area_light) {
+					auto mat = intersection.sobj->Get<Cmpt::Material>();
+					auto brdf = dynamic_cast<const stdBRDF*>(mat->material.get());
+					float roughness = brdf->Roughness(intersection.uv);
+					L_indir += Shade(inter, inter_rst, -wi, roughness < EPSILON<float>) * BRDF(intersection, wo, wi) * wi.dot(intersection.n.cast_to<vecf3>()) / pdf / Russian_Roulette_;
+				}
 			}
 		}
 	}
-
-	todo_color = L_dir;
+	
+	todo_color = L_dir + L_indir;
 	return todo_color; // TODO: combine L_dir and L_indir
 
 }
@@ -279,10 +289,11 @@ PathTracer::SampleLightResult PathTracer::SampleLight(IntersectorClosest::Rst in
 		if (rand01<float>() < p_mat) {
 			tie(wi, pd_mat) = SampleBRDF(intersection, wo);
 			Le = env_light->Radiance(wi);
-			pd_env = env_light->PDF(wi); // TODO: use your PDF
+			pd_env = 1.0;// env_light->PDF(wi); // TODO: use your PDF
 		}
 		else {
-			tie(Le, wi, pd_env) = env_light->Sample(intersection.n); // TODO: use your sampling method
+			//tie(Le, wi, pd_env) = env_light->Sample(intersection.n); // TODO: use your sampling method
+			tie(Le, wi, pd_env) = env_light->Sample();
 			matf3 surface_to_world = svecf::TBN(intersection.n.cast_to<vecf3>(), intersection.tangent);
 			matf3 world_to_surface = surface_to_world.inverse();
 			svecf s_wo = (world_to_surface * wo).cast_to<svecf>();
