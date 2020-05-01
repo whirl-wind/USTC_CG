@@ -203,7 +203,7 @@ rgbf PathTracer::Shade(const Intersectors& intersectors, const IntersectorCloses
 				if (cos_l < 0.0) {
 					cos_l = 0.0;
 				}
-				L_dir += sample_light_rst.L* BRDF(intersection, wo, r.dir)* r.dir.dot(intersection.n.cast_to<vecf3>())* cos_l / (intersection.pos - sample_light_rst.x).norm2() / sample_light_rst.pd;
+				L_dir += sample_light_rst.L* BRDF(intersection, wo, r.dir)* r.dir.dot(intersection.n.cast_to<vecf3>()) * cos_l / (intersection.pos - sample_light_rst.x).norm2() / sample_light_rst.pd;
 			}
 		}
 	});
@@ -244,7 +244,6 @@ rgbf PathTracer::Shade(const Intersectors& intersectors, const IntersectorCloses
 	
 	todo_color = L_dir + L_indir;
 	return todo_color; // TODO: combine L_dir and L_indir
-
 }
 
 PathTracer::SampleLightResult PathTracer::SampleLight(IntersectorClosest::Rst intersection, const vecf3& wo, const Cmpt::Light* light, const Cmpt::L2W* l2w, const Cmpt::SObjPtr* ptr) {
@@ -289,11 +288,11 @@ PathTracer::SampleLightResult PathTracer::SampleLight(IntersectorClosest::Rst in
 		if (rand01<float>() < p_mat) {
 			tie(wi, pd_mat) = SampleBRDF(intersection, wo);
 			Le = env_light->Radiance(wi);
-			pd_env = 1.0;// env_light->PDF(wi); // TODO: use your PDF
+			pd_env = env_light->PDF(wi); // TODO: use your PDF
 		}
 		else {
-			//tie(Le, wi, pd_env) = env_light->Sample(intersection.n); // TODO: use your sampling method
-			tie(Le, wi, pd_env) = env_light->Sample();
+			tie(Le, wi, pd_env) = env_light->Sample(intersection.n); // TODO: use your sampling method
+			//tie(Le, wi, pd_env) = env_light->Sample();
 			matf3 surface_to_world = svecf::TBN(intersection.n.cast_to<vecf3>(), intersection.tangent);
 			matf3 world_to_surface = surface_to_world.inverse();
 			svecf s_wo = (world_to_surface * wo).cast_to<svecf>();
